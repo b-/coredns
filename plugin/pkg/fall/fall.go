@@ -27,12 +27,12 @@ type F struct {
 // Through will check if we should fallthrough for qname. Note that we've named the
 // variable in each plugin "Fall", so this then reads Fall.Through().
 func (f F) Through(qname string) bool {
-	return plugin.Zones(f.Zones).Matches(qname) != ""
+	return plugin.Zones(f.Zones).Contains(qname)
 }
 
 // setZones will set zones in f.
 func (f *F) setZones(zones []string) {
-	z := []string{}
+	z := make([]string, 0, len(zones))
 	for i := range zones {
 		z = append(z, plugin.Host(zones[i]).NormalizeExact()...)
 	}

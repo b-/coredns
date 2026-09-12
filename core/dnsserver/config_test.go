@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/coredns/caddy"
+	"github.com/coredns/coredns/plugin"
+
+	"github.com/miekg/dns"
 )
 
 func TestKeyForConfig(t *testing.T) {
@@ -64,4 +67,66 @@ func TestGetConfig(t *testing.T) {
 			t.Fatal("config is not the same instance as the one saved in the context")
 		}
 	})
+}
+
+func TestAddPluginToAllServerBlocks(t *testing.T) {
+	c := caddy.NewTestController("dns", "")
+	ctx := c.Context().(*dnsContext)
+	first := &Config{}
+	secondZone := &Config{firstConfigInBlock: first}
+	third := &Config{}
+	first.firstConfigInBlock = first
+	third.firstConfigInBlock = third
+	ctx.configs = []*Config{first, secondZone, third}
+
+	AddPluginToAllServerBlocks(c, func(next plugin.Handler) plugin.Handler { return next })
+
+	if got := len(first.Plugin); got != 1 {
+		t.Fatalf("first server block has %d plugins, want 1", got)
+	}
+	if got := len(secondZone.Plugin); got != 0 {
+		t.Fatalf("secondary zone has %d plugins before propagation, want 0", got)
+	}
+	if got := len(third.Plugin); got != 1 {
+		t.Fatalf("second server block has %d plugins, want 1", got)
+	}
+}
+
+func TestPropagateConfigParamsMaxTCPQueries(t *testing.T) {
+	n := 128
+	first := &Config{MaxTCPQueries: &n}
+	first.firstConfigInBlock = first
+	second := &Config{firstConfigInBlock: first}
+
+	propagateConfigParams([]*Config{first, second})
+
+	if second.MaxTCPQueries == nil || *second.MaxTCPQueries != n {
+		t.Fatalf("expected MaxTCPQueries to propagate to second config as %d, got %v", n, second.MaxTCPQueries)
+	}
+}
+
+func TestPropagateConfigParamsMaxHTTPSStreams(t *testing.T) {
+	n := 7
+	first := &Config{MaxHTTPSStreams: &n}
+	first.firstConfigInBlock = first
+	second := &Config{firstConfigInBlock: first}
+
+	propagateConfigParams([]*Config{first, second})
+
+	if second.MaxHTTPSStreams == nil || *second.MaxHTTPSStreams != n {
+		t.Fatalf("expected MaxHTTPSStreams to propagate to second config as %d, got %v", n, second.MaxHTTPSStreams)
+	}
+}
+
+func TestPropagateConfigParamsAllowedOpcodes(t *testing.T) {
+	first := &Config{}
+	first.firstConfigInBlock = first
+	first.AllowOpcode(dns.OpcodeUpdate)
+	second := &Config{firstConfigInBlock: first}
+
+	propagateConfigParams([]*Config{first, second})
+
+	if !second.acceptsOpcode(dns.OpcodeUpdate) {
+		t.Fatal("expected UPDATE admission to propagate to every zone in the server block")
+	}
 }

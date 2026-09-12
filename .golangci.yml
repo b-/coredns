@@ -9,13 +9,22 @@ linters:
   enable:
     - canonicalheader
     - copyloopvar
+    - durationcheck
+    - forbidigo
+    - godoclint
+    - gosec
     - govet
     - ineffassign
     - intrange
+    - modernize
+    - nakedret
     - nolintlint
+    - perfsprint
+    - prealloc
     - protogetter
     - staticcheck
     - thelper
+    - revive
     - unconvert
     - unused
     - usetesting
@@ -28,7 +37,25 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      # Exclude some linters from running on tests files.
+      - path: _test\.go
+        linters:
+          - perfsprint
+          - gosec
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: "^prometheus\\.(NewCounter|NewCounterVec|NewGauge|NewGaugeVec|NewGaugeFunc|NewHistogram|NewHistogramVec|NewSummary|NewSummaryVec)$"
+          pkg: "^github\\.com/prometheus/client_golang/prometheus$"
+          msg: use github.com/prometheus/client_golang/prometheus/promauto
+
+    govet:
+      enable:
+        - nilness
+    perfsprint:
+      error-format: false
     revive:
       rules:
         - name: blank-imports

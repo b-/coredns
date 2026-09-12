@@ -211,7 +211,7 @@ func (k *Kubernetes) ExternalServices(zone string, headless bool) (services []ms
 
 // ExternalSerial returns the serial of the external zone
 func (k *Kubernetes) ExternalSerial(string) uint32 {
-	return uint32(k.APIConn.Modified(ModifiedExternal))
+	return uint32(k.APIConn.Modified(ModifiedExternal)) // #nosec G115 -- Unix time to SOA serial
 }
 
 // ExternalReverse does a reverse lookup for the external IPs
@@ -224,8 +224,10 @@ func (k *Kubernetes) ExternalReverse(ip string) ([]msg.Service, error) {
 }
 
 func (k *Kubernetes) serviceRecordForExternalIP(ip string) []msg.Service {
-	var svcs []msg.Service
-	for _, service := range k.APIConn.SvcExtIndexReverse(ip) {
+	svcList := k.APIConn.SvcExtIndexReverse(ip)
+	svcLen := len(svcList)
+	svcs := make([]msg.Service, 0, svcLen)
+	for _, service := range svcList {
 		if len(k.Namespaces) > 0 && !k.namespaceExposed(service.Namespace) {
 			continue
 		}

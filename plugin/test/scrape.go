@@ -14,7 +14,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package test will scrape a target and you can inspect the variables.
+// Package test contains helper functions for writing plugin tests.
+// For example to scrape a target and inspect the variables.
 // Basic usage:
 //
 //	result := Scrape("http://localhost:9153/metrics")
@@ -22,24 +23,25 @@
 package test
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"mime"
 	"net/http"
 	"strconv"
 
-	"github.com/matttproud/golang_protobuf_extensions/pbutil"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"google.golang.org/protobuf/encoding/protodelim"
 )
 
 type (
 	// MetricFamily holds a prometheus metric.
 	MetricFamily struct {
-		Name    string        `json:"name"`
-		Help    string        `json:"help"`
-		Type    string        `json:"type"`
-		Metrics []interface{} `json:"metrics,omitempty"` // Either metric or summary.
+		Name    string `json:"name"`
+		Help    string `json:"help"`
+		Type    string `json:"type"`
+		Metrics []any  `json:"metrics,omitempty"` // Either metric or summary.
 	}
 
 	// metric is for all "single value" metrics.
@@ -150,21 +152,21 @@ func newMetricFamily(dtoMF *dto.MetricFamily) *MetricFamily {
 		Name:    dtoMF.GetName(),
 		Help:    dtoMF.GetHelp(),
 		Type:    dtoMF.GetType().String(),
-		Metrics: make([]interface{}, len(dtoMF.GetMetric())),
+		Metrics: make([]any, len(dtoMF.GetMetric())),
 	}
 	for i, m := range dtoMF.GetMetric() {
 		if dtoMF.GetType() == dto.MetricType_SUMMARY {
 			mf.Metrics[i] = summary{
 				Labels:    makeLabels(m),
 				Quantiles: makeQuantiles(m),
-				Count:     fmt.Sprint(m.GetSummary().GetSampleCount()),
+				Count:     strconv.FormatUint(m.GetSummary().GetSampleCount(), 10),
 				Sum:       fmt.Sprint(m.GetSummary().GetSampleSum()),
 			}
 		} else if dtoMF.GetType() == dto.MetricType_HISTOGRAM {
 			mf.Metrics[i] = histogram{
 				Labels:  makeLabels(m),
 				Buckets: makeBuckets(m),
-				Count:   fmt.Sprint(m.GetHistogram().GetSampleCount()),
+				Count:   strconv.FormatUint(m.GetHistogram().GetSampleCount(), 10),
 				Sum:     fmt.Sprint(m.GetSummary().GetSampleSum()),
 			}
 		} else {
@@ -209,7 +211,7 @@ func makeQuantiles(m *dto.Metric) map[string]string {
 func makeBuckets(m *dto.Metric) map[string]string {
 	result := map[string]string{}
 	for _, b := range m.GetHistogram().GetBucket() {
-		result[fmt.Sprint(b.GetUpperBound())] = fmt.Sprint(b.GetCumulativeCount())
+		result[fmt.Sprint(b.GetUpperBound())] = strconv.FormatUint(b.GetCumulativeCount(), 10)
 	}
 	return result
 }
@@ -234,9 +236,10 @@ func fetchMetricFamilies(url string, ch chan<- *dto.MetricFamily) {
 	if err == nil && mediatype == "application/vnd.google.protobuf" &&
 		params["encoding"] == "delimited" &&
 		params["proto"] == "io.prometheus.client.MetricFamily" {
+		reader := bufio.NewReader(resp.Body)
 		for {
 			mf := &dto.MetricFamily{}
-			if _, err = pbutil.ReadDelimited(resp.Body, mf); err != nil {
+			if err = protodelim.UnmarshalFrom(reader, mf); err != nil {
 				if err == io.EOF {
 					break
 				}

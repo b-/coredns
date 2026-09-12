@@ -17,6 +17,9 @@ import (
 )
 
 func init() {
+	if err := dnsserver.Register(); err != nil {
+		panic(err)
+	}
 	caddy.DefaultConfigFile = "Corefile"
 	caddy.Quiet = true // don't show init stuff from caddy
 	setVersion()
@@ -80,7 +83,7 @@ func Run() {
 	}
 
 	// Twiddle your thumbs
-	instance.Wait()
+	runService(instance)
 }
 
 // mustLogFatal wraps log.Fatal() in a way that ensures the
@@ -89,7 +92,7 @@ func Run() {
 // enabled. If this process is an upgrade, however, and the user
 // might not be there anymore, this just logs to the process
 // log and exits.
-func mustLogFatal(args ...interface{}) {
+func mustLogFatal(args ...any) {
 	if !caddy.IsUpgrade() {
 		log.SetOutput(os.Stderr)
 	}
@@ -192,6 +195,6 @@ var (
 	gitShortStat     string // git diff-index --shortstat
 	gitFilesModified string // git diff-index --name-only HEAD
 
-	// Gitcommit contains the commit where we built CoreDNS from.
+	// GitCommit contains the commit where we built CoreDNS from.
 	GitCommit string
 )

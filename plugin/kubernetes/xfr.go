@@ -18,8 +18,7 @@ import (
 
 // Transfer implements the transfer.Transfer interface.
 func (k *Kubernetes) Transfer(zone string, serial uint32) (<-chan []dns.RR, error) {
-	match := plugin.Zones(k.Zones).Matches(zone)
-	if match == "" {
+	if !plugin.Zones(k.Zones).Contains(zone) {
 		return nil, transfer.ErrNotAuthoritative
 	}
 	// state is not used here, hence the empty request.Request{]
@@ -47,17 +46,17 @@ func (k *Kubernetes) Transfer(zone string, serial uint32) (<-chan []dns.RR, erro
 				nsHosts[nsHost] = struct{}{}
 				ch <- []dns.RR{&dns.NS{Hdr: dns.RR_Header{Name: zone, Rrtype: dns.TypeNS, Class: dns.ClassINET, Ttl: k.ttl}, Ns: nsHost}}
 			}
-			ch <- nsAddrs
-
-			if !k.isMultiClusterZone(zone) {
-				k.transferServices(ch, zonePath)
-			} else {
-				k.transferMultiClusterServices(ch, zonePath)
-			}
-
-			ch <- soa
-			close(ch)
 		}
+		ch <- nsAddrs
+
+		if !k.isMultiClusterZone(zone) {
+			k.transferServices(ch, zonePath)
+		} else {
+			k.transferMultiClusterServices(ch, zonePath)
+		}
+
+		ch <- soa
+		close(ch)
 	}()
 	return ch, nil
 }
@@ -257,8 +256,7 @@ func emitAddressRecord(c chan<- []dns.RR, s msg.Service) string {
 // calcSRVWeight borrows the logic implemented in plugin.SRV for dynamically
 // calculating the srv weight and priority
 func calcSRVWeight(numservices int) uint16 {
-	var services []msg.Service
-
+	services := make([]msg.Service, 0, numservices)
 	for range numservices {
 		services = append(services, msg.Service{})
 	}
